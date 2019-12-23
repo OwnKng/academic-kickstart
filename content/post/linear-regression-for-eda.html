@@ -185,7 +185,9 @@ model_tidy %&gt;%
   labs(x = &quot;&quot;, y = &quot;&quot;, 
        title = &quot;Actual and predicted median house prices in Tower Hamlets, 2008 - 2018&quot;)</code></pre>
 <p><img src="/post/linear-regression-for-eda_files/figure-html/unnamed-chunk-8-1.png" width="864" /></p>
-<p>We can dig deeper into the variation in model performance by region by faceting our earlier visualisation. Below, we can see that almost everywhere in London has experienced more than 6% annual increases in house prices since 2008, while in the East and South East more than half of locations have experienced more than 5% annual increases. Most locations in the East Midlands, South West and West Midlands have experienced between 2.5% and 5%. In Yorkshire, the North West, North East and Wales, the coefficients are lower and model performance worse - likely indicating that house price growth has been slower or more volatile.</p>
+<p>We can dig deeper into the variation in model performance by region by faceting our earlier visualisation. Below, we can see that almost everywhere in London has experienced more than 6% annual increases in house prices since 2008, while in the East and South East more than half of locations have experienced more than 5% annual increases.</p>
+<p>Most locations in the East Midlands, South West and West Midlands have experienced between 2.5% and 5%.</p>
+<p>In Yorkshire, the North West, North East and Wales, the coefficients are lower and model performance worse - likely indicating that house price growth has been slower or more volatile.</p>
 <pre class="r"><code>model_tidy %&gt;% 
   mutate(region_country_name = 
            fct_reorder(region_country_name, -year_since_08, .fun = median)) %&gt;% 
