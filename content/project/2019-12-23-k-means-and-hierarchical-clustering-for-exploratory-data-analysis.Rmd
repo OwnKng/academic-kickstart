@@ -28,7 +28,7 @@ More information on this approach can be found here: https://r4ds.had.co.nz/mode
 
 ## How have house prices in England and Wales changed since 2008? 
 
-Data on median property prices in England and Wales is published quarterly by the Office for National Statistics, using data from the Land Registry. It is available here: https://www.ons.gov.uk/peoplepopulationandcommunity/housing/datasets/medianhousepricefornationalandsubnationalgeographiesquarterlyrollingyearhpssadataset09   
+Data on median property prices in England and Wales is published quarterly by the Office for National Statistics, using data from the Land Registry. It is available [here]( https://www.ons.gov.uk/peoplepopulationandcommunity/housing/datasets/medianhousepricefornationalandsubnationalgeographiesquarterlyrollingyearhpssadataset09)   
 
 The Excel document contains house prices for different administrative geographies of England and Wales, and different types of property. Here, we'll look at median prices for all property types in the c. 350 local authorities in England and Wales.  
 
