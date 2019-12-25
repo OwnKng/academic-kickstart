@@ -25,7 +25,7 @@ knitr::opts_chunk$set(echo = TRUE)
 options(scipen = 9999)
 ```
 
-This post shows how ternary plots can be both an communicative and beautiful form of data visualisation. To create the ternary plot, we'll use the ggtern package (see http://www.ggtern.com/ for more info), as well as a function from my own JLLify package (see here: https://github.com/OwnKng/JLLify) to style the plots. 
+This post shows how ternary plots can be both a highly informative and beautiful form of data visualisation. To create the ternary plot, we'll use the ggtern package (see http://www.ggtern.com/ for more info), as well as a function from my own JLLify package (see here: https://github.com/OwnKng/JLLify) to style the plots. 
 
 ### The Data
 
@@ -60,7 +60,7 @@ energy_summarised
 
 ### Visualising the Data
 
-We can pipe the summarised data into a ggplot command to produce a rather standard filled column graph. 
+We can then pipe the summarised data into a ggplot command to produce a rather standard filled column graph. 
 
 ```{r}
 
@@ -73,9 +73,11 @@ energy_summarised %>%
 
 ### Using a Ternary Plot 
 
-Where we have three categories in our data, ternary plots are a good alternative to the standard column graphs. Using a ternary plot, we can see which share each category of energy consumption represents. It's also perhaps easier to see whether there's a general  trend in our data than with a column graph - e.g. does domestic energy consumption represent the main source of energy consumption across the London boroughs?    
+Where we have three categories in our data, ternary plots are a good alternative to the standard column graphs. Using a ternary plot, we can see what share each category of energy consumption represents. It's also perhaps easier to see whether there's a general  trend in our data than with a column graph - e.g. does domestic energy consumption represent the main source of energy consumption across the London boroughs?    
 
-The ggtern package is an extension to ggplot that enables the creation of ternary charts. As these plots have three axes, they can be difficult to read correctly. To remedy this, I've developed some light touch functions that handle the aesthetic styling of a ternary plot - applying axes colouring, shading certain zones and adding labels, etc. These functions are available in the JLLify package, which can be installed via github. 
+The ggtern package is an excellent extension to ggplot that enables the creation of ternary plots. 
+
+As these plots have three axes however, they can be difficult to read correctly. To remedy this, I've developed some light touch functions that handle the aesthetic styling of a ggtern object - applying axes colouring, shading certain zones and adding labels, etc. These functions are available in the JLLify package, which can be installed via github. 
 
 ```{r fig.height = 12, fig.width = 12, message=FALSE, warning=FALSE}
 library(ggtern)
@@ -106,9 +108,9 @@ From this plot, we can see that in around two-thirds of London boroughs, domesti
 
 While this plot is useful for looking at the overall trend in the data, what it lacks is the ability to look at the distribution in each London borough (unlike the column graph). We can resolve this by faceting the visualisation, generating a longer, info-graphic style plot. 
 
-From this plot, we can easilly pick out the London boroughs for which industrial and commercial applications represent a higher share of energy usage - Westminster, Camden, the City.    
+From this plot, we can easilly pick out the London boroughs for which industrial and commercial applications represent a higher share of energy usage - Westminster, Camden, the City etc.   
 
-```{r, fig.width = 18, fig.height = 60, echo=FALSE, warning=FALSE}
+```{r, fig.width = 18, fig.height = 60, warning=FALSE}
 
 ggtern_base(x_label = "Dom.",
             x_color = "#B8D8D8",

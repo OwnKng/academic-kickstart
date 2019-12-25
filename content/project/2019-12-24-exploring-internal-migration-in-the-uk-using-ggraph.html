@@ -1,0 +1,396 @@
+---
+title: Exploring Internal Migration in the UK using ggraph
+author: ''
+date: '2019-12-24'
+slug: exploring-internal-migration-in-the-uk-using-ggraph
+categories: []
+tags: 
+  - data viz
+  - geospatial analysis
+  - R
+summary: ''
+authors: []
+external_link: ''
+image:
+  caption: ''
+  focal_point: ''
+  preview_only: no
+url_code: ''
+url_pdf: ''
+url_slides: ''
+url_video: ''
+slides: ''
+---
+
+
+
+<p>This analysis looks at trends in internal migration in the UK. The data comes from the UK’s Office for National Statistics, which publishes annual estimates of the number of people moving between each local authority in England and Wales. It is availble to download <a href="https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/migrationwithintheuk/datasets/internalmigrationbyoriginanddestinationlocalauthoritiessexandsingleyearofagedetailedestimatesdataset">here</a>.</p>
+<p>As the data provides an estimate of the number of migrations for each local authority combination, it’s perfect for network analysis. Network analysis is concerned with the visualisation of relationships between different objects. Relationships in network analysis are often called ‘edges’, while the objects of the analysis are called ‘nodes’.</p>
+<p>The excellent ggraph package is an extension to ggplot that provides a suite of functions for analysing and visulising networks. Here, we’ll use it to identify the flows of people between between different local authority areas.</p>
+<div id="reading-in-and-cleaning-the-data" class="section level3">
+<h3>Reading in and cleaning the data</h3>
+<p>The internal migration data comes in two separate csv files, which we’ll read in using the fread function from the data.table package. We’ll then bind these two files together.</p>
+<p>The estimates provide a breakdown by gender, which we’re not interested in here. Because they’re model-based estimates, they’re also not whole numbers - so we add the figures for each gender together, and then round the estimate to the nearest whole number.</p>
+<pre class="r"><code>library(tidyverse)
+
+migration &lt;- data.table::fread(&quot;Detailed_Estimates_2018_Dataset_1_2019_LA_boundaries.csv&quot;) %&gt;% 
+  bind_rows(data.table::fread(&quot;Detailed_Estimates_2018_Dataset_2_2019_LA_boundaries.csv&quot;)) %&gt;% 
+  janitor::clean_names() %&gt;% 
+  # Counting total number of moves by age (including both genders) of both genders
+  group_by(out_la, in_la, age) %&gt;% 
+  summarise(moves = sum(moves) %&gt;% round(0)) %&gt;% 
+  ungroup()
+
+migration</code></pre>
+<pre><code>## # A tibble: 1,093,317 x 4
+##    out_la    in_la       age moves
+##    &lt;chr&gt;     &lt;chr&gt;     &lt;int&gt; &lt;dbl&gt;
+##  1 E06000001 E06000002     0     1
+##  2 E06000001 E06000002     1     1
+##  3 E06000001 E06000002     2     4
+##  4 E06000001 E06000002     3     4
+##  5 E06000001 E06000002     5     6
+##  6 E06000001 E06000002     6     4
+##  7 E06000001 E06000002     7     1
+##  8 E06000001 E06000002     8     4
+##  9 E06000001 E06000002     9     3
+## 10 E06000001 E06000002    10     1
+## # … with 1,093,307 more rows</code></pre>
+<p>The local authorities are here denoted by their GSS code. These codes are extremly useful when merging lots of different datasets together, as the names can often be written slighly differently. For our analysis however, the place names are more useful - so we’ll read in a seperate Excel file with a lookup of codes to names, so we can add these to our data.</p>
+<p>Using the codes to names data, we can also attribute each local authority to an area of the England and Wales. This is important if we want to look at migration in a particular region, or merge a number of local authorities into a single node. Later in the analysis, we’ll merge all the London boroughs into a single node - we’re more interested in migration to London overall, than migration to any particular borough of London.</p>
+<pre class="r"><code>local_authority_codes &lt;- 
+  readxl::read_xlsx(&quot;lasregionew2018.xlsx&quot;, skip = 4) %&gt;% 
+  select(&quot;la_code&quot; = 1, &quot;la_name&quot; = 2, &quot;region&quot; = 4)
+
+london_codes &lt;- local_authority_codes %&gt;% filter(region == &quot;London&quot;)</code></pre>
+<p><strong>Migration between towns and cities</strong></p>
+<p>One challenge with the data is that it includes an estimate of migration or every possible local authority combination, even though many of these locations will be predominantly rural areas.</p>
+<p>What we’re interested in is migration between larger urban areas. Fortunatly, Parliament.uk have published a breakdown of which local authorities are predominatly urban. For our analysis, we’ll take any local authority where the share of the population classified as living in a city or large town is greater than 70% - this leaves us with a list of around 100 large towns and cities, which we’ll merge into the data.</p>
+<pre class="r"><code>towns_and_cities &lt;- read_csv(&quot;lauth-classification-csv.csv&quot;) %&gt;% 
+  filter(classification %in% c(&quot;Core City (London)&quot;, &quot;Core City (outside London)&quot;, 
+                               &quot;Other City&quot;, &quot;Large Town&quot;)) %&gt;% 
+  filter(percent_of_localauth &gt; 0.7) %&gt;% 
+  distinct(localauth_code, localauth_name) %&gt;% 
+  rename(&quot;la_code&quot; = localauth_code, &quot;la_name&quot; = localauth_name)
+
+# Merging the towns and cities into the migration data 
+migration &lt;- migration %&gt;% 
+  inner_join(local_authority_codes %&gt;% select(la_code, la_name), by = c(&quot;in_la&quot; = &quot;la_code&quot;)) %&gt;% 
+  semi_join(towns_and_cities, by = c(&quot;in_la&quot; = &quot;la_code&quot;)) %&gt;% 
+  select(-in_la) %&gt;% 
+  rename(&quot;in_la&quot; = la_name) %&gt;% 
+  inner_join(local_authority_codes %&gt;% select(la_code, la_name), by = c(&quot;out_la&quot; = &quot;la_code&quot;)) %&gt;% 
+  semi_join(towns_and_cities, by = c(&quot;out_la&quot; = &quot;la_code&quot;)) %&gt;% 
+  select(-out_la) %&gt;% 
+  rename(&quot;out_la&quot; = la_name) %&gt;% 
+  select(out_la, in_la, age, moves)</code></pre>
+<p><strong>Merging all the London Boroughs</strong></p>
+<p>We’ll now merge all the London boroughs, and join this back into the migration data.</p>
+<pre class="r"><code>moves_to_london &lt;- migration %&gt;% 
+  filter(in_la %in% london_codes$la_name) %&gt;% 
+  filter(!(out_la %in% london_codes$la_name)) %&gt;% 
+  group_by(out_la, age) %&gt;% 
+  summarise(moves = sum(moves)) %&gt;% 
+  mutate(in_la = &quot;London&quot;)
+
+moves_from_london &lt;- migration %&gt;% 
+  filter(out_la %in% london_codes$la_name) %&gt;% 
+  filter(!(in_la %in% london_codes$la_name)) %&gt;% 
+  group_by(in_la, age) %&gt;% 
+  summarise(moves = sum(moves)) %&gt;% 
+  mutate(out_la = &quot;London&quot;)
+
+moves_london &lt;- bind_rows(moves_to_london, moves_from_london)
+
+migration &lt;- migration %&gt;% 
+  filter(!(in_la %in% london_codes$la_name)) %&gt;% 
+  filter(!(out_la %in% london_codes$la_name)) %&gt;% 
+  bind_rows(moves_london)</code></pre>
+</div>
+<div id="exploring-migration-between-england-and-wales-urban-areas" class="section level3">
+<h3>Exploring Migration Between England and Wales’ urban areas</h3>
+<p>To visualise the network, we’ll need to build two datasets - one containing the towns and cities, which we’ll call ‘nodes’; and one containing the migration numbers for each combination, which we’ll call ‘edges’.</p>
+<p>We won’t look at migration of all age groups - we’ll focus instead on those people aged between 23 and 30 years old. Typically, this is a time in life when people are more likely to migrate, as they may have recently finished their education and haven’t yet started a family or bought a home.</p>
+<p>We’ll also add some other details to the nodes data - the region that the node is located in, as well as the total moves into the node. We’ll use both of these columns in the visuals later on.</p>
+<pre class="r"><code># Creating the nodes data 
+nodes &lt;- migration %&gt;% 
+  select(out_la) %&gt;% 
+  distinct() %&gt;% 
+  rowid_to_column(var = &quot;id&quot;) %&gt;% 
+  rename(&quot;city&quot; = out_la)
+
+# Creating the edges data 
+edges &lt;- migration %&gt;% 
+  group_by(out_la, in_la) %&gt;% 
+  # filtering those records where people are between 23 and 30 years old. 
+  filter(age %in% c(23:30)) %&gt;% 
+  summarise(moves = sum(moves)) %&gt;% 
+  ungroup() %&gt;% 
+  left_join(nodes, by = c(&quot;out_la&quot; = &quot;city&quot;)) %&gt;% 
+  rename(&quot;from&quot; = id)
+
+edges &lt;- edges %&gt;% 
+  left_join(nodes, by = c(&quot;in_la&quot; = &quot;city&quot;)) %&gt;% 
+  rename(&quot;to&quot; = id)
+
+edges &lt;- edges %&gt;% select(from, to, moves)
+
+# Calculate the total moves into each area, and merging into the migration data
+moves_total &lt;- edges %&gt;% 
+  group_by(to) %&gt;% 
+  summarise(total_moves = sum(moves)) %&gt;% 
+  ungroup()
+
+nodes &lt;- nodes %&gt;% 
+  left_join(moves_total, by = c(&quot;id&quot; = &quot;to&quot;)) %&gt;% 
+  left_join(local_authority_codes %&gt;% select(la_name, region), by = c(&quot;city&quot; = &quot;la_name&quot;)) 
+
+# Doing some basic cleaning 
+nodes[is.na(nodes$region),]$region &lt;- &quot;London&quot;
+
+nodes &lt;- nodes %&gt;% 
+  arrange(region, id) %&gt;% 
+  mutate(city = fct_inorder(city))</code></pre>
+<p>To create the network visualisations, we need to convert the data into a specialist structure which <code>gggraph</code> understands. We can do this using the <code>graph_from_data_frame()</code> function from the <code>igraph</code> package. The arguments to these functions are the edges and nodes dataframes we just created.</p>
+<p>We can then pass the network data to the <code>ggraph()</code> function to produce a network visualisation. The resulting plot is pretty, but not particularly useful - as there is some level of migration between all the town and cities, every node is connected. We’ll want to further refine our analysis as we progress.</p>
+<pre class="r"><code>library(ggraph)
+library(igraph)
+
+migration_net &lt;- graph_from_data_frame(d = edges, vertices = nodes, directed = TRUE)
+
+ggraph(migration_net, layout = &#39;kk&#39;) +
+  geom_edge_link(aes(alpha = moves), show.legend = FALSE) + 
+  geom_node_point(aes(size = total_moves), show.legend = FALSE) +
+  scale_edge_width(range = c(0.2, 1)) </code></pre>
+<p><img src="/project/2019-12-24-exploring-internal-migration-in-the-uk-using-ggraph_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
+<p><strong>Where contributes the most young people to London?</strong></p>
+<p>One way of approaching the data is to look at migration to a particular location, allowing us to see which town and cities contribute the most migrants. The code below does this for London, using the ‘linear’ layout of <code>ggraph()</code>, with circular set to TRUE.</p>
+<p>In preparing the edges data, we also only look at combinations of towns and cities where more 100 people moved to the city in question. This reduces the number of rows in the edges data from over 3,000 to 182.</p>
+<p>Note that these edges are directed, so we can visualise not just migration to a city, but also migration from the city by setting the ‘directed’ parameter in <code>ggraph()</code> to TRUE and using the function <code>geom_edge_fan()</code>.</p>
+<pre class="r"><code>ldn_id &lt;- nodes[nodes$city == &quot;London&quot;, ]$id
+
+edges %&gt;% 
+  filter(moves &gt; 100) %&gt;% 
+  mutate(london = if_else(to %in% ldn_id | from %in% ldn_id, TRUE, FALSE)) %&gt;% 
+  graph_from_data_frame(vertices = nodes, directed = TRUE) %&gt;% 
+  ggraph(layout = &#39;linear&#39;, circular = TRUE) +
+  geom_edge_fan(aes(alpha = moves, col = london, width = moves), arrow = arrow(length = unit(2, &quot;mm&quot;)), 
+                end_cap = circle(4, &quot;mm&quot;), show.legend = FALSE) + 
+  geom_node_point(aes(size = total_moves), shape = 21, show.legend = FALSE, col = &quot;skyblue&quot;) + 
+  geom_node_text(aes(label = city), alpha = 0.5, family = &quot;Segoe UI Light&quot;) + 
+  scale_alpha_continuous(range = c(0.1, 0.5)) + 
+  scale_edge_width(range = c(0.2, 1)) + 
+  scale_edge_color_manual(values = c(&quot;TRUE&quot; = &quot;skyblue&quot;, &quot;FALSE&quot; = &quot;lightgrey&quot;)) +
+  theme_graph(background = &quot;white&quot;, base_family = &quot;Segoe UI Light&quot;) + 
+  labs(title = &quot;Sources of young person migration to London&quot;)</code></pre>
+<p><img src="/project/2019-12-24-exploring-internal-migration-in-the-uk-using-ggraph_files/figure-html/unnamed-chunk-7-1.png" width="960" /></p>
+<p>In the above plot, thicker lines denote higher levels of migration.</p>
+<p>If we want to do this for other towns and cities, we can create a function to quickly generate new plots. This saves a lot of copying and pasting.</p>
+<pre class="r"><code>plot_migration &lt;- function(city, color = &quot;skyblue&quot;) {
+  
+  city_id &lt;- nodes[nodes$city == city, ]$id
+  
+  nodes_city &lt;- nodes %&gt;% mutate(target_city = if_else(city_id == id, TRUE, FALSE))
+  
+  edges %&gt;% 
+    filter(moves &gt; 100) %&gt;% 
+    mutate(city_to_from = if_else(to %in% city_id | from %in% city_id, TRUE, FALSE)) %&gt;% 
+    graph_from_data_frame(vertices = nodes_city, directed = TRUE) %&gt;% 
+    ggraph(layout = &#39;linear&#39;, circular = TRUE) +
+    geom_edge_fan(aes(col = city_to_from, alpha = city_to_from, width = moves), 
+                  arrow = arrow(length = unit(2, &quot;mm&quot;)), 
+                  end_cap = circle(4, &quot;mm&quot;), show.legend = FALSE) + 
+    geom_node_point(aes(col = target_city), shape = 21, show.legend = FALSE) + 
+    geom_node_text(aes(label = city), alpha = 0.5, family = &quot;Segoe UI Light&quot;) + 
+    scale_edge_width(range = c(0.2, 1)) + 
+    scale_edge_alpha_discrete(range = c(0.2, 1)) + 
+    scale_edge_color_manual(values = c(&quot;TRUE&quot; = color, &quot;FALSE&quot; = &quot;lightgrey&quot;)) +
+    scale_color_manual(values = c(&quot;TRUE&quot; = color, &quot;FALSE&quot; = &quot;lightgrey&quot;)) +
+    theme_graph(background = &quot;white&quot;, base_family = &quot;Segoe UI Light&quot;) + 
+    labs(title = paste0(&quot;Sources of young person migration to &quot;, city))
+}</code></pre>
+<p>Calling our function will then generate the formatted plot.</p>
+<pre class="r"><code>plot_migration(city = &quot;Manchester&quot;, color = &quot;red&quot;)</code></pre>
+<p><img src="/project/2019-12-24-exploring-internal-migration-in-the-uk-using-ggraph_files/figure-html/unnamed-chunk-9-1.png" width="768" /></p>
+<pre class="r"><code>plot_migration(city = &quot;Bristol, City of&quot;, color = &quot;darkblue&quot;)</code></pre>
+<p><img src="/project/2019-12-24-exploring-internal-migration-in-the-uk-using-ggraph_files/figure-html/unnamed-chunk-9-2.png" width="768" /></p>
+<p><strong>How are different towns and cities connected?</strong></p>
+<p>After we set our threshold for sizeable migration to 100 people, we may then want to explore how connected the different towns and cities are - e.g. are there areas which have sizeable migration flows to lots of other cities, and are there locations which have no sizeable migration flows?</p>
+<p>This is what the plot below shows. London is the centre, as it has the most connections of any area. We can also pick out locations like Bristol and Birmingham, which have a lot of connections too.</p>
+<p>On the edges of the visualisation, we can see locations like Blackburn and Hartlepool, which have no connections to any areas - these locations do not see any sizeable migration of young people either in or out.</p>
+<pre class="r"><code>migration_net &lt;- graph_from_data_frame(d = edges %&gt;% filter(moves &gt; 100), 
+                                       vertices = nodes, directed = TRUE)
+
+ggraph(migration_net, layout = &quot;kk&quot;) +
+  geom_edge_fan(aes(alpha = moves), arrow = arrow(length = unit(2, &quot;mm&quot;)), 
+                end_cap = circle(4, &quot;mm&quot;), show.legend = FALSE) + 
+  geom_node_point(shape = 21) + 
+  scale_edge_width(range = c(0.2, 1)) +
+  geom_node_text(aes(label = city), alpha = 0.5, family = &quot;Segoe UI Light&quot;) +
+  labs(title = &quot;Migration of young people between England and Wales&#39; largest towns and cities&quot;) +
+  theme_graph(border = FALSE, title_family = &quot;Segoe UI Light&quot;)</code></pre>
+<p><img src="/project/2019-12-24-exploring-internal-migration-in-the-uk-using-ggraph_files/figure-html/unnamed-chunk-10-1.png" width="1152" /></p>
+<p><strong>Where are the key hubs of migration across the regions of England and Wales?</strong></p>
+<p>We can also build a visualisation by region, exploring how interconnected towns and cities are within a particular refion. To do this, we’ll need to re-create out network data to include only flows where the migration is inside the region. We’ll also lower the threshold of migration in the edges from 100 people to 50 people.</p>
+<pre class="r"><code>migration_intra_region &lt;- migration %&gt;% 
+  left_join(local_authority_codes %&gt;% select(&quot;out_la&quot; = la_name, &quot;out_region&quot; = region)) %&gt;% 
+  left_join(local_authority_codes %&gt;% select(&quot;in_la&quot; = la_name, &quot;in_region&quot; = region)) %&gt;% 
+  filter(!is.na(out_region)) %&gt;% # Removes London
+  filter(out_region == in_region) %&gt;% 
+  filter(age %in% c(23:30)) %&gt;% 
+  group_by(out_la, in_la, out_region, in_region) %&gt;% 
+  summarise(moves = sum(moves)) %&gt;% 
+  ungroup() 
+
+nodes &lt;- migration_intra_region %&gt;% 
+  select(out_la, out_region) %&gt;% 
+  distinct() %&gt;% 
+  rowid_to_column(var = &quot;id&quot;) %&gt;% 
+  rename(&quot;city&quot; = out_la, &quot;region&quot; = out_region)
+
+edges &lt;- migration_intra_region %&gt;% 
+  left_join(nodes, by = c(&quot;out_la&quot; = &quot;city&quot;)) %&gt;% 
+  rename(&quot;from&quot; = id)
+
+edges &lt;- edges %&gt;% 
+  left_join(nodes %&gt;% rename(&quot;in_la&quot; = city, &quot;in_region&quot; = region)) %&gt;% 
+  rename(&quot;to&quot; = id)
+
+edges &lt;- edges %&gt;% select(from, to, moves)
+
+migration_intra_region_network &lt;- graph_from_data_frame(d = edges %&gt;% filter(moves &gt; 50), 
+                                                        vertices = nodes, directed = TRUE)</code></pre>
+<p>The visualisation below is very informative. We can see in the East, for instance, that only Cambridge, Norwich, Ipswich and Colchester have sizeable migration flows in their region.</p>
+<p>In the South West, all locations are linked to Bristol, though almost all the other locations don’t have sizeable migration flows between them. The picture is similar in the West Midlands, where Birmingham is the centre of migration but the other locations are generally not connected.</p>
+<pre class="r"><code>ggraph(migration_intra_region_network, layout = &#39;kk&#39;) +
+  geom_edge_fan(aes(alpha = moves), 
+                arrow = arrow(length = unit(2, &quot;mm&quot;)), 
+                end_cap = circle(2, &quot;mm&quot;), 
+                show.legend = FALSE) + 
+  geom_node_point(show.legend = FALSE) +
+  geom_node_text(aes(label = city)) + 
+  scale_edge_width(range = c(0.1, 5)) + 
+  facet_nodes(~region, scales = &quot;free&quot;, ncol = 2) </code></pre>
+<p><img src="/project/2019-12-24-exploring-internal-migration-in-the-uk-using-ggraph_files/figure-html/unnamed-chunk-12-1.png" width="960" /></p>
+<p><strong>Visualising the migration flows on a map</strong></p>
+<p>A great feature of <code>ggraph</code> is the ability to create your own layouts. This allows us, using a shapefile we’ll read in now, to place the nodes on a map of England and Wales and draw the connections between them.</p>
+<p>We’ll read in two shapefiles to do this. One that contains the local authorities shapes, from which we’ll take the centroids get the lat lons of each city. The other is an outline of the UK, which we’ll use only for the data visualisation.</p>
+<pre class="r"><code>library(sf)
+
+uk_map &lt;- read_sf(&quot;uk map&quot;, 
+                  &quot;Local_Authority_Districts_December_2017_Full_Clipped_Boundaries_in_Great_Britain&quot;) %&gt;% 
+  select(&quot;la_code&quot; = 2, &quot;la_name&quot; = 3) %&gt;% 
+  st_transform(crs = 4326) 
+
+cities_coords &lt;- semi_join(uk_map, towns_and_cities, by = &quot;la_code&quot;) %&gt;%
+  st_centroid(uk_map) 
+
+cities_coords &lt;- cities_coords %&gt;% 
+  mutate(long = st_coordinates(.)[,1], 
+         lat = st_coordinates(.)[,2]) %&gt;% 
+  as.data.frame() %&gt;% 
+  select(-geometry) %&gt;% 
+  as_tibble()
+
+uk_map_outline &lt;- read_sf(&quot;uk map&quot;, &quot;NUTS_Level_1_January_2018_Ultra_Generalised_Clipped_Boundaries_in_the_United_Kingdom&quot;) %&gt;% 
+  st_transform(crs = 4326) %&gt;% 
+  filter(!(nuts118nm %in% c(&quot;Scotland&quot;, &quot;Northern Ireland&quot;))) %&gt;% 
+  st_union() </code></pre>
+<p>We’ll now need to re-create our nodes and edges, merging in the latitude and longitude of all the towns and cities.</p>
+<pre class="r"><code>nodes &lt;- migration %&gt;% 
+  select(out_la) %&gt;% 
+  distinct() %&gt;% 
+  rowid_to_column(var = &quot;id&quot;) %&gt;% 
+  rename(&quot;city&quot; = out_la)
+
+edges &lt;- migration %&gt;% 
+  group_by(out_la, in_la) %&gt;% 
+  filter(age %in% c(23:30)) %&gt;% 
+  summarise(moves = sum(moves)) %&gt;% 
+  ungroup() %&gt;% 
+  left_join(nodes, by = c(&quot;out_la&quot; = &quot;city&quot;)) %&gt;% 
+  rename(&quot;from&quot; = id)
+
+edges &lt;- edges %&gt;% 
+  left_join(nodes, by = c(&quot;in_la&quot; = &quot;city&quot;)) %&gt;% 
+  rename(&quot;to&quot; = id)
+
+edges &lt;- edges %&gt;% select(from, to, moves)
+
+cities_coords &lt;- cities_coords %&gt;% 
+  right_join(nodes, by = c(&quot;la_name&quot; = &quot;city&quot;)) %&gt;% 
+  select(-la_code)
+
+cities_coords[cities_coords$la_name == &quot;London&quot;,]$long &lt;- 0.1278
+cities_coords[cities_coords$la_name == &quot;London&quot;,]$lat &lt;- 51.5074
+
+moves_total &lt;- edges %&gt;% 
+  group_by(to) %&gt;% 
+  summarise(total_moves = sum(moves)) %&gt;% 
+  ungroup() %&gt;% 
+  rename(&quot;id&quot; = to)
+
+nodes &lt;- nodes %&gt;% left_join(moves_total, by = &quot;id&quot;)</code></pre>
+<p>We can now create the custom node layout using the <code>create_layout()</code> function, passing it the coordinates from the cities_coords dataframe.</p>
+<pre class="r"><code>migration_coords &lt;- graph_from_data_frame(d = edges %&gt;% filter(moves &gt; 50), vertices = nodes, directed = TRUE)
+
+migration_coords &lt;- create_layout(migration_coords, 
+              layout = bind_cols(list(&quot;x&quot; = cities_coords$long, &quot;y&quot; = cities_coords$lat)))</code></pre>
+<p>We can then pass this into a call to <code>ggraph()</code>, producing the resulting visualisation.</p>
+<pre class="r"><code>ggraph(migration_coords) + 
+  geom_edge_fan(aes(alpha = moves, width = moves, col = moves), arrow = arrow(length = unit(2, &quot;mm&quot;)), 
+                end_cap = circle(4, &quot;mm&quot;), show.legend = FALSE) + 
+  geom_node_point(aes(size = total_moves), col = &quot;darkgrey&quot;, show.legend = FALSE) + 
+  geom_node_text(aes(label = city), vjust = -0.5, family = &quot;Segoe UI Light&quot;, 
+                 size = 5, color = &quot;darkgrey&quot;) + 
+  scale_alpha_continuous(range = c(0.1, 0.5)) + 
+  scale_edge_width(range = c(0.2, 1)) + 
+  scale_edge_color_distiller(palette = &quot;Reds&quot;) +
+  geom_sf(data = uk_map_outline, fill = NA, col = &quot;lightgrey&quot;, size = 0.1) + 
+  labs(title = &quot;Internal Migration of young people between England and Wales&#39;s largest towns and cities&quot;) +
+  theme_graph(border = FALSE, title_family = &quot;Segoe UI Light&quot;, 
+              title_colour = &quot;darkgrey&quot;, title_size = 20,
+              background = &quot;#0E0E16&quot;)</code></pre>
+<p><img src="/project/2019-12-24-exploring-internal-migration-in-the-uk-using-ggraph_files/figure-html/unnamed-chunk-16-1.png" width="1440" />
+We can see from the above visualisation that a large share of the internal migration of 23 - 30 year olds in England and Wales is people moving to London.</p>
+<p>If we want to focus in on migration to and from a particular city, we can create a function that produces a visual similar to the one above, but that highlights the edges that connect to the city in question.</p>
+<pre class="r"><code>plot_migration_map &lt;- function(city, color = &quot;skyblue&quot;){
+  
+  city_id &lt;- nodes[nodes$city == city,]$id
+  
+  edges &lt;- edges %&gt;% mutate(is_city = to %in% city_id | from %in% city_id)
+  nodes &lt;- nodes %&gt;% mutate(is_city = id == city_id)
+  
+  migration_coords &lt;- graph_from_data_frame(d = edges %&gt;% filter(moves &gt; 50), vertices = nodes, directed = TRUE)
+  
+  migration_coords &lt;- create_layout(migration_coords, 
+                                    layout = bind_cols(list(&quot;x&quot; = cities_coords$long, &quot;y&quot; = cities_coords$lat)))
+  
+  ggraph(migration_coords) + 
+    geom_edge_fan(aes(width = moves, col = is_city == TRUE, alpha = is_city),
+                  arrow = arrow(length = unit(2, &quot;mm&quot;)), 
+                  end_cap = circle(4, &quot;mm&quot;), show.legend = FALSE) + 
+    geom_node_point(aes(size = total_moves), col = &quot;darkgrey&quot;, alpha = 0.1, show.legend = FALSE) +
+    geom_node_text(aes(label = city, color = is_city), vjust = -0.5, family = &quot;Segoe UI Light&quot;, 
+                 size = 6, show.legend = FALSE) + 
+    scale_color_manual(values = c(&quot;TRUE&quot; = color, &quot;FALSE&quot; = &quot;darkgrey&quot;)) +
+    scale_edge_width(range = c(0.2, 1)) + 
+    scale_edge_alpha_discrete(range = c(0.1, 4)) + 
+    scale_edge_color_manual(values = c(&quot;TRUE&quot; = color, &quot;FALSE&quot; = &quot;darkgrey&quot;)) + 
+    geom_sf(data = uk_map_outline, fill = NA, col = &quot;lightgrey&quot;, size = 0.1) + 
+    labs(title = paste0(&quot;Internal Migration of young people to and from &quot;, city)) +
+    theme_graph(border = FALSE, title_family = &quot;Segoe UI Light&quot;, 
+                title_colour = &quot;darkgrey&quot;,
+                background = &quot;#0E0E16&quot;)
+  
+}</code></pre>
+<p>We can then plot any location we’re interested in to identify how the number and geographic spread of their connections vary.</p>
+<pre class="r"><code>plot_migration_map(city = &quot;Birmingham&quot;, color = &quot;#9A054A&quot;)</code></pre>
+<p><img src="/project/2019-12-24-exploring-internal-migration-in-the-uk-using-ggraph_files/figure-html/unnamed-chunk-18-1.png" width="960" /></p>
+<pre class="r"><code>plot_migration_map(&quot;Manchester&quot;, color = &quot;red&quot;)</code></pre>
+<p><img src="/project/2019-12-24-exploring-internal-migration-in-the-uk-using-ggraph_files/figure-html/unnamed-chunk-18-2.png" width="960" /></p>
+<pre class="r"><code>plot_migration_map(&quot;Cambridge&quot;, color = &quot;#ED700A&quot;)</code></pre>
+<p><img src="/project/2019-12-24-exploring-internal-migration-in-the-uk-using-ggraph_files/figure-html/unnamed-chunk-18-3.png" width="960" /></p>
+<pre class="r"><code>plot_migration_map(&quot;Norwich&quot;, color = &quot;#BBCEA4&quot;)</code></pre>
+<p><img src="/project/2019-12-24-exploring-internal-migration-in-the-uk-using-ggraph_files/figure-html/unnamed-chunk-18-4.png" width="960" /></p>
+</div>

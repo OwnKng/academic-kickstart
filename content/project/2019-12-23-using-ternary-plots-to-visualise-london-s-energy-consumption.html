@@ -21,7 +21,7 @@ projects: []
 
 
 
-<p>This post shows how ternary plots can be both an communicative and beautiful form of data visualisation. To create the ternary plot, we’ll use the ggtern package (see <a href="http://www.ggtern.com/" class="uri">http://www.ggtern.com/</a> for more info), as well as a function from my own JLLify package (see here: <a href="https://github.com/OwnKng/JLLify" class="uri">https://github.com/OwnKng/JLLify</a>) to style the plots.</p>
+<p>This post shows how ternary plots can be both a highly informative and beautiful form of data visualisation. To create the ternary plot, we’ll use the ggtern package (see <a href="http://www.ggtern.com/" class="uri">http://www.ggtern.com/</a> for more info), as well as a function from my own JLLify package (see here: <a href="https://github.com/OwnKng/JLLify" class="uri">https://github.com/OwnKng/JLLify</a>) to style the plots.</p>
 <div id="the-data" class="section level3">
 <h3>The Data</h3>
 <p>The data we’re using comes the London Energy and Greenhouse Gas Inventory (LEGGI). This is a record of greenhouse gas emissions and energy consumption from homes, workplaces and transport within the Greater London area. It is published every year, though the most recent record we have is from 2017. Here, we will look at energy consumption only.</p>
@@ -62,7 +62,7 @@ energy_summarised</code></pre>
 </div>
 <div id="visualising-the-data" class="section level3">
 <h3>Visualising the Data</h3>
-<p>We can pipe the summarised data into a ggplot command to produce a rather standard filled column graph.</p>
+<p>We can then pipe the summarised data into a ggplot command to produce a rather standard filled column graph.</p>
 <pre class="r"><code>energy_summarised %&gt;% 
   ggplot(aes(area, energy_consumption)) + 
   geom_col(aes(fill = sector), position = &quot;fill&quot;) +
@@ -71,8 +71,9 @@ energy_summarised</code></pre>
 </div>
 <div id="using-a-ternary-plot" class="section level3">
 <h3>Using a Ternary Plot</h3>
-<p>Where we have three categories in our data, ternary plots are a good alternative to the standard column graphs. Using a ternary plot, we can see which share each category of energy consumption represents. It’s also perhaps easier to see whether there’s a general trend in our data than with a column graph - e.g. does domestic energy consumption represent the main source of energy consumption across the London boroughs?</p>
-<p>The ggtern package is an extension to ggplot that enables the creation of ternary charts. As these plots have three axes, they can be difficult to read correctly. To remedy this, I’ve developed some light touch functions that handle the aesthetic styling of a ternary plot - applying axes colouring, shading certain zones and adding labels, etc. These functions are available in the JLLify package, which can be installed via github.</p>
+<p>Where we have three categories in our data, ternary plots are a good alternative to the standard column graphs. Using a ternary plot, we can see what share each category of energy consumption represents. It’s also perhaps easier to see whether there’s a general trend in our data than with a column graph - e.g. does domestic energy consumption represent the main source of energy consumption across the London boroughs?</p>
+<p>The ggtern package is an excellent extension to ggplot that enables the creation of ternary plots.</p>
+<p>As these plots have three axes however, they can be difficult to read correctly. To remedy this, I’ve developed some light touch functions that handle the aesthetic styling of a ggtern object - applying axes colouring, shading certain zones and adding labels, etc. These functions are available in the JLLify package, which can be installed via github.</p>
 <pre class="r"><code>library(ggtern)
 
 # devtools::install_github(&quot;OwnKng/JLLify&quot;)
@@ -97,6 +98,19 @@ ggtern_base(x_label = &quot;Domestic&quot;,
 <p><img src="/project/2019-12-23-using-ternary-plots-to-visualise-london-s-energy-consumption_files/figure-html/unnamed-chunk-4-1.png" width="1152" /></p>
 <p>From this plot, we can see that in around two-thirds of London boroughs, domestic consumption accounts for the largest share of energy consumption. Industrial and commercial consumption accounts for the majority of energy usage in the other third. In one London borough - Hillingdon, where Heathrow Airport is located - transport represents about 50% of energy consumption.</p>
 <p>While this plot is useful for looking at the overall trend in the data, what it lacks is the ability to look at the distribution in each London borough (unlike the column graph). We can resolve this by faceting the visualisation, generating a longer, info-graphic style plot.</p>
-<p>From this plot, we can easilly pick out the London boroughs for which industrial and commercial applications represent a higher share of energy usage - Westminster, Camden, the City.</p>
+<p>From this plot, we can easilly pick out the London boroughs for which industrial and commercial applications represent a higher share of energy usage - Westminster, Camden, the City etc.</p>
+<pre class="r"><code>ggtern_base(x_label = &quot;Dom.&quot;,
+            x_color = &quot;#B8D8D8&quot;,
+            y_label = &quot;Indus.&quot;,
+            y_color = &quot;#FE5F55&quot;, 
+            z_label = &quot;Trans.&quot;,
+            z_color = &quot;#EEF5DB&quot;) +
+  geom_point(data = energy_tern, aes(Domestic, `Industrial and Commercial`, Transport), 
+             shape = 17, size = 6, color = &quot;white&quot;) + 
+  facet_wrap(~area, ncol = 3) + 
+  theme_ternary_dark(x_color = &quot;#B8D8D8&quot;, y_color = &quot;#FE5F55&quot;, z_color = &quot;#EEF5DB&quot;) + 
+  labs(title = &quot;Energy Consumption by Sector&quot;, 
+       subtitle = &quot;% of Boroughs&#39; energy consumption from domestic, industrial or transport uses&quot;,
+       x = &quot;%&quot;, y = &quot;%&quot;, z = &quot;%&quot;) </code></pre>
 <p><img src="/project/2019-12-23-using-ternary-plots-to-visualise-london-s-energy-consumption_files/figure-html/unnamed-chunk-5-1.png" width="1728" /></p>
 </div>

@@ -29,6 +29,11 @@ title = "Projects"
   [[content.filter_button]]
     name = "data viz"
     tag = "data viz"
+    
+  [[content.filter_button]]
+    name = "geospatial analysis"
+    tag = "geospatial analysis"
+
 
 [design]
   # Choose how many columns the section has. Valid values: 1 or 2.
