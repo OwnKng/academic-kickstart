@@ -48,6 +48,6 @@ email: ""
  
 *Hi, I'm Owen*
 
-I work in quantitative research. My interests include data visualisation, automation and applications of machine learning. 
+I'm a quantitative researcher in the property sector, based in London. In my professional work, I apply skills in data visualisation, geospatial analysis, automation and machine learning to generate insights, automate processes and create new products. 
 
-This site is a collection of my personal projects, mainly written in R. 
+This site is a collection of my personal projects, mainly written in R. My R code makes extensive use of the Tidyverse, ggplot and R Shiny. I also have experience in package development and apply the principals of functional programming across my work. 
