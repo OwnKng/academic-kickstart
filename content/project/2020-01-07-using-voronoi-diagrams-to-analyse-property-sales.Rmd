@@ -243,7 +243,7 @@ tower_hamlets_voronoi %>%
 
 We can easily take our Voronoi geometry and overlay it onto a map using the ```leaflet``` package. This has the added benefit that we can use a tooltip to surface the price of any transaction when we hover over the geometry. This makes it easier to pick out the extreme values, including those flats which sold for less than £100,000. 
 
-```{r, message=FALSE, warning=FALSE}
+```{r, message=FALSE, warning=FALSE, eval=FALSE}
 library(leaflet)
 
 color_pal <- colorNumeric(log(tower_hamlets_voronoi$price), palette = "YlGnBu", reverse = TRUE)
@@ -258,6 +258,27 @@ tower_hamlets_voronoi %>%
   addPolygons(fillColor = ~color_pal(log(price)), color = "lightgrey", 
               weight = 0.2, opacity = 1, fillOpacity = 0.7,
               label = ~paste0("Sale price: ", dollar(price, prefix = "£")))
+
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(leaflet)
+library(widgetframe)
+
+color_pal <- colorNumeric(log(tower_hamlets_voronoi$price), palette = "YlGnBu", reverse = TRUE)
+
+tower_hamlets_voronoi %>% 
+  st_transform(crs = 4326) %>% 
+  leaflet() %>% 
+  addProviderTiles(provider = providers$CartoDB.DarkMatter) %>% 
+  addPolygons(data = st_transform(tower_hamlets_map, crs = 4326), 
+              fillOpacity = 0, opacity = 1, weight = 1, 
+              color = "white") %>% 
+  addPolygons(fillColor = ~color_pal(log(price)), color = "lightgrey", 
+              weight = 0.2, opacity = 1, fillOpacity = 0.7,
+              label = ~paste0("Sale price: ", dollar(price, prefix = "£"))) %>% 
+  frameWidget()
+
 
 ```
 
@@ -323,7 +344,7 @@ west_voronoi_summarised <- west_voronoi %>%
 
 We'll again use leaflet to visualise the Voronoi diagram. Note that the dots here show the location of the stations.  
 
-```{r, message=FALSE, warning = FALSE}
+```{r, message=FALSE, warning = FALSE, eval=FALSE}
 
 color_pal <- colorNumeric(log(west_voronoi_summarised$price), palette = "YlGnBu", reverse = TRUE)
 
@@ -339,6 +360,26 @@ west_voronoi_summarised %>%
                 "Sale price: ", dollar(price, prefix = "£"), "<br>",
                 "Number of sales: ", comma(number_sales)) %>% lapply(htmltools::HTML)
               )
+
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+color_pal <- colorNumeric(log(west_voronoi_summarised$price), palette = "YlGnBu", reverse = TRUE)
+
+west_voronoi_summarised %>% 
+  st_transform(crs = 4326) %>% 
+  leaflet() %>% 
+  addProviderTiles(provider = providers$CartoDB.DarkMatter) %>% 
+  addCircles(data = st_transform(stations_west, 4326), color = "white") %>% 
+  addPolygons(fillColor = ~color_pal(log(price)), color = "white",
+              weight = 0.2, opacity = 1, fillOpacity = 0.7,
+              label = ~paste0(
+                station, "<br>",
+                "Sale price: ", dollar(price, prefix = "£"), "<br>",
+                "Number of sales: ", comma(number_sales)) %>% lapply(htmltools::HTML)
+              ) %>% 
+  frameWidget()
 
 ```
 
